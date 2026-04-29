@@ -70,6 +70,7 @@ from sglang.srt.utils.common import (
 from sglang.srt.utils.hf_transformers_utils import check_gguf_file
 from sglang.srt.utils.network import NetworkAddress, get_free_port, wait_port_available
 from sglang.srt.utils.runai_utils import ObjectStorageModel, is_runai_obj_uri
+from sglang.srt.utils.tensor_bridge import use_mlx
 from sglang.utils import is_in_ci
 
 logger = logging.getLogger(__name__)
@@ -1164,7 +1165,8 @@ class ServerArgs:
 
     def _handle_mps_backends(self):
         if self.device == "mps":
-            self.disable_overlap_schedule = True
+            if not use_mlx():
+                self.disable_overlap_schedule = True
 
     def _handle_xpu_backends(self):
         if self.device == "xpu":
@@ -2132,7 +2134,15 @@ class ServerArgs:
                         )
                 else:
                     self.quantization = model_config.quantization
-                self.moe_runner_backend = "flashinfer_cutlass"
+                if self.moe_runner_backend == "auto":
+                    if is_sm100_supported() and self.moe_a2a_backend == "none":
+                        self.moe_runner_backend = "flashinfer_trtllm"
+                        logger.info(
+                            "Use flashinfer_trtllm as MoE runner backend on sm100 for "
+                            f"{model_arch}"
+                        )
+                    else:
+                        self.moe_runner_backend = "flashinfer_cutlass"
 
             self._handle_mamba_radix_cache(
                 model_arch=model_arch,
