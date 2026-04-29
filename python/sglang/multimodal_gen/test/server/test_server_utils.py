@@ -423,9 +423,7 @@ class ServerManager:
             flush=True,
         )
 
-        self._wait_for_ready(process, stdout_path)
-
-        return ServerContext(
+        ctx = ServerContext(
             port=self.port,
             process=process,
             model=self.model,
@@ -435,6 +433,13 @@ class ServerManager:
             _stdout_fh=stdout_fh,
             _log_thread=log_thread,
         )
+        try:
+            self._wait_for_ready(process, stdout_path)
+        except Exception:
+            ctx.cleanup()
+            raise
+
+        return ctx
 
     def _wait_for_ready(self, process: subprocess.Popen, stdout_path: Path) -> None:
         """Wait for server to become ready."""
